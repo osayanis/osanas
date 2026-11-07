@@ -25,6 +25,26 @@ loadsave_settings -sf
 
 Alt-F lance `/mnt/sda2/.osanas.sh` au démarrage ou dès que le disque est monté. L'interface est sur `http://<ip>:8080` (mot de passe par défaut : `admin`, à changer dans Système).
 
+## Accès à distance
+
+Le NAS ouvre lui-même un tunnel SSH inverse vers un serveur public : aucun port à ouvrir sur la box. Sur le serveur, Nginx sert le tunnel en HTTPS (ici `https://nas.osalabs.fr`).
+
+Sur le NAS, dans `/mnt/sda2/.osanas/` :
+
+```sh
+dropbearkey -t ecdsa -s 256 -f tunnel_key         # clé du tunnel (dropbear 2017 : pas d'ed25519)
+printf 'TUNNEL_DEST=nastunnel@<serveur>\nTUNNEL_PORT=3080\n' > tunnel.conf
+ssh-keyscan -t ecdsa,rsa <serveur> > known_hosts   # empreintes vérifiées à l'avance
+```
+
+Sur le serveur, la clé n'a droit qu'à ouvrir ce port :
+
+```
+restrict,port-forwarding,permitlisten="127.0.0.1:3080",command="/usr/sbin/nologin" ecdsa-sha2-nistp256 AAAA…
+```
+
+Puis un `server` Nginx qui fait `proxy_pass http://127.0.0.1:3080` avec `client_max_body_size 0`, `proxy_request_buffering off` et `X-Forwarded-Proto` (le cookie de session devient alors `Secure`). Le SMB, lui, reste réservé au réseau local.
+
 ## Structure
 
 ```

@@ -124,7 +124,7 @@ func saveSessionsLocked() {
 	}
 }
 
-func newSession(w http.ResponseWriter) {
+func newSession(w http.ResponseWriter, r *http.Request) {
 	b := make([]byte, 24)
 	rand.Read(b)
 	tok := hex.EncodeToString(b)
@@ -138,7 +138,9 @@ func newSession(w http.ResponseWriter) {
 	sessions[tok] = now.Add(sessionTTL)
 	saveSessionsLocked()
 	sessMu.Unlock()
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: tok, Path: "/", MaxAge: int(sessionTTL.Seconds()), HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	// Secure seulement derrière HTTPS (nas.osalabs.fr) : en local, le panneau est en HTTP
+	secure := r.Header.Get("X-Forwarded-Proto") == "https"
+	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: tok, Path: "/", MaxAge: int(sessionTTL.Seconds()), HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode})
 }
 
 func loggedIn(r *http.Request) bool {

@@ -10,6 +10,8 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   };
+  // ouvert via nas.osalabs.fr (tunnel) plutôt que sur le réseau de la maison : le SMB n'y passe pas
+  var REMOTE = location.protocol === "https:";
   var fr = function (n, d) { return Number(n).toLocaleString("fr-FR", { maximumFractionDigits: d == null ? 0 : d, minimumFractionDigits: 0 }); };
 
   function bytes(n) {
@@ -267,7 +269,7 @@
       '<h2 id="h-title">Bonjour.</h2><p id="h-sub">Je regarde comment va le NAS…</p>' +
       '<div class="actions"><button class="pill" id="h-files">' + icon("folder", "sm") + "Parcourir les fichiers</button>" +
       '<button class="pill secondary" id="h-up">' + icon("upload", "sm") + "Envoyer</button>" +
-      '<a class="pill secondary" id="h-finder" href="#">' + icon("finder", "sm") + "Ouvrir dans le Finder</a></div>" +
+      (REMOTE ? "" : '<a class="pill secondary" id="h-finder" href="#">' + icon("finder", "sm") + "Ouvrir dans le Finder</a>") + "</div>" +
       "</div></section>" +
       '<section class="card c-8"><div class="card-head"><span class="tile">' + icon("disk", "sm") + '</span><h3>Stockage</h3><span class="meta">Volume_1 · ext4</span></div>' +
       '<div class="storage-top"><div class="big num" id="s-free">—</div><div class="label" id="s-pct"></div></div>' +
@@ -302,7 +304,7 @@
         if (lastMood !== hl.mood) { $("#mascot").innerHTML = osaMascot({ mood: hl.mood, arms: lastMood === null && hl.mood === "happy" ? "wave" : "rest", size: 96 }); lastMood = hl.mood; }
         $("#h-title").textContent = hl.title;
         $("#h-sub").textContent = st.name + " · allumé depuis " + uptime(st.uptime) + " · " + bytes(st.volume.free) + " libres";
-        $("#h-finder").href = "smb://" + st.ip + "/Volume_1";
+        if ($("#h-finder")) $("#h-finder").href = "smb://" + st.ip + "/Volume_1";
         var used = st.volume.total - st.volume.free, pct = st.volume.total ? used / st.volume.total * 100 : 0;
         $("#s-free").innerHTML = esc(bytes(st.volume.free)) + "<small>libres</small>";
         $("#s-pct").textContent = fr(pct, pct < 10 ? 1 : 0) + " % utilisés";
@@ -709,10 +711,11 @@
     if (!$("#y-access").dataset.done) {
       $("#y-access").dataset.done = "1";
       $("#y-access").innerHTML =
-        '<p class="dim" style="margin:0 0 4px">Dans le Finder : <b>⌘K</b> puis colle l’adresse. Connexion en invité.</p>' +
+        '<p class="dim" style="margin:0 0 4px">Dans le Finder : <b>⌘K</b> puis colle l’adresse. Connexion en invité' + (REMOTE ? ", depuis chez toi uniquement" : "") + ".</p>" +
         copyRow("macOS", "smb://" + st.ip + "/Volume_1", "smb://" + st.ip + "/Volume_1") +
         copyRow("Windows", "\\\\" + st.ip + "\\Volume_1") +
-        copyRow("OsaNAS", "http://" + st.ip + ":8080", "http://" + st.ip + ":8080");
+        copyRow("Maison", "http://" + st.ip + ":8080", REMOTE ? null : "http://" + st.ip + ":8080") +
+        copyRow("Partout", "https://nas.osalabs.fr", REMOTE ? null : "https://nas.osalabs.fr");
       $$("[data-copy]", $("#y-access")).forEach(function (b) {
         b.onclick = function () {
           var t = b.dataset.copy;
@@ -723,7 +726,8 @@
         };
       });
     }
-    $("#y-ver").textContent = "OsaNAS " + st.version + " · servi par le NAS sur le port 8080";
+    $("#y-ver").textContent = "OsaNAS " + st.version + (REMOTE ? " · à distance via nas.osalabs.fr" : " · servi par le NAS sur le port 8080");
+    $("#y-legacy").hidden = REMOTE; // l'interface Alt-F n'est joignable que depuis la maison
     $("#y-legacy").href = "http://" + st.ip + "/";
   }
   function power(what) {

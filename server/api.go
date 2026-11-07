@@ -88,7 +88,7 @@ func api(w http.ResponseWriter, r *http.Request) {
 				time.Sleep(700 * time.Millisecond)
 				return fail(401, "Mot de passe incorrect")
 			}
-			newSession(w)
+			newSession(w, r)
 			res = map[string]any{"user": "admin", "admin": true, "defaultPassword": loadAuth() == nil}
 		case "logout":
 			endSession(w, r)
@@ -107,7 +107,7 @@ func api(w http.ResponseWriter, r *http.Request) {
 			sessMu.Lock() // les autres appareils devront se reconnecter
 			sessions = map[string]time.Time{}
 			sessMu.Unlock()
-			newSession(w)
+			newSession(w, r)
 			res = map[string]any{"ok": true}
 		case "status":
 			res = status()

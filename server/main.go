@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const Version = "2.0.1"
+const Version = "2.1.0"
 
 //go:embed www
 var webFS embed.FS
@@ -43,7 +43,10 @@ func main() {
 	sub, _ := fs.Sub(webFS, "www")
 	static := http.FileServer(http.FS(sub))
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api", api)
+	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Frame-Options", "DENY")
+		api(w, r)
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" || strings.HasSuffix(r.URL.Path, ".html") {
 			w.Header().Set("Cache-Control", "no-cache")
@@ -52,6 +55,7 @@ func main() {
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
+		w.Header().Set("X-Frame-Options", "DENY")
 		static.ServeHTTP(w, r)
 	})
 
