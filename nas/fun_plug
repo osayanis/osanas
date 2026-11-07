@@ -1,11 +1,18 @@
 #!/bin/sh
 # OsaNAS - lance par le firmware D-Link au demarrage (chk_fun_plug), en root.
-# Passe la main a start.sh. Supprimer ce fichier desactive OsaNAS.
+# Le volume peut etre encore en lecture seule a ce moment (verification au boot) :
+# on attend qu'il soit inscriptible (10 min max), puis on passe la main a start.sh.
+# Supprimer ce fichier desactive OsaNAS.
 B=/mnt/HD/HD_a2/.osanas
-mkdir -p $B/log
-echo "fun_plug $(cut -d' ' -f1 /proc/uptime)s" > $B/log/fun_plug.log
-if [ -f $B/start.sh ]; then
-  sh $B/start.sh > $B/log/start.log 2>&1 < /dev/null &
-fi
-echo "fun_plug ok" >> $B/log/fun_plug.log
+(
+  i=0
+  while [ $i -lt 120 ]; do
+    if mkdir -p $B/log 2>/dev/null && echo "fun_plug: volume inscriptible apres $i essais" > $B/log/fun_plug.log 2>/dev/null; then
+      break
+    fi
+    i=`expr $i + 1`
+    sleep 5
+  done
+  [ -f $B/start.sh ] && sh $B/start.sh > $B/log/start.log 2>&1
+) < /dev/null > /dev/null 2>&1 &
 exit 0
