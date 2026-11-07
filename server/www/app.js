@@ -89,7 +89,7 @@
     if (opts.query) for (var k in opts.query) q += "&" + k + "=" + encodeURIComponent(opts.query[k]);
     var init = { credentials: "same-origin", headers: { "X-Osa": "1" } };
     if (opts.body) { init.method = "POST"; init.headers["Content-Type"] = "application/json"; init.body = JSON.stringify(opts.body); }
-    return fetch("api.php?a=" + action + q, init).then(function (r) {
+    return fetch("api?a=" + action + q, init).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (r.status === 401 && action !== "login" && action !== "password") { S.user = null; render(); }
         if (!r.ok) { var e = new Error(j.error || "Erreur " + r.status); e.status = r.status; throw e; }
@@ -97,7 +97,7 @@
       });
     });
   }
-  function fileURL(path, inline) { return "api.php?a=get&path=" + encodeURIComponent(path) + (inline ? "&inline=1" : ""); }
+  function fileURL(path, inline) { return "api?a=get&path=" + encodeURIComponent(path) + (inline ? "&inline=1" : ""); }
 
   /* ================= état ================= */
   var S = {
@@ -154,7 +154,7 @@
       '<div class="err" id="lerr"></div>' +
       '<button class="pill" type="submit">Se connecter</button>' +
       "</form>" +
-      '<div class="login-foot">D-Link DNS-320</div>' +
+      '<div class="login-foot">D-Link DNS-320 · Alt-F</div>' +
       "</div></div>";
     $("#lf").addEventListener("submit", function (e) {
       e.preventDefault();
@@ -217,7 +217,7 @@
       if (e.status === 401) return;
       if (++fails >= 2) showOffline("Le NAS ne répond plus", "Je réessaie toutes les 3 secondes…");
     });
-    if (!S.disks || Math.random() < 0.05) api("disks").then(function (d) { S.disks = d.disks; updateLive(); }).catch(function () {});
+    if (!S.disks || S.disks.some(function (d) { return d.health === "pending"; }) || Math.random() < 0.05) api("disks").then(function (d) { S.disks = d.disks; updateLive(); }).catch(function () {});
   }
   function push(arr, v) { if (v == null) return; arr.push(v); if (arr.length > 40) arr.shift(); }
   document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });
@@ -229,6 +229,8 @@
     if (usedPct >= 95) return { mood: "worried", title: "Le disque est plein.", level: "bad" };
     if (st.temp != null && st.temp >= 52) return { mood: "worried", title: "Je chauffe un peu.", level: "warn" };
     if (usedPct >= 85) return { mood: "worried", title: "Le disque se remplit.", level: "warn" };
+    var sick = (S.disks || []).filter(function (d) { return d.health === "bad" || d.health === "error"; })[0];
+    if (sick) return { mood: "worried", title: "Un disque fatigue.", level: "warn" };
     if (S.uploading) return { mood: "busy", title: "Je range tes fichiers…", level: "ok" };
     var h = new Date().getHours();
     if (h >= 0 && h < 6) return { mood: "sleepy", title: "Tout est calme.", level: "ok" };
@@ -267,7 +269,7 @@
       '<div class="legend"><span id="s-used">—</span><span id="s-total">—</span></div></section>' +
       '<section class="card c-4"><div class="card-head"><span class="tile">' + icon("temp", "sm") + '</span><h3>Température</h3><span class="dot" id="t-dot"></span></div>' +
       '<div class="big num" id="t-val">—</div><div class="label" id="t-lab" style="margin-top:6px">—</div></section>' +
-      '<section class="card c-4"><div class="card-head"><span class="tile">' + icon("cpu", "sm") + '</span><h3>Processeur</h3><span class="meta">ARM 1,2 GHz</span></div>' +
+      '<section class="card c-4"><div class="card-head"><span class="tile">' + icon("cpu", "sm") + '</span><h3>Processeur</h3><span class="meta">ARMv5 · 800 MHz</span></div>' +
       '<div class="big num" id="c-val">—</div><div id="c-spark">' + spark([[]]) + "</div></section>" +
       '<section class="card c-4"><div class="card-head"><span class="tile">' + icon("memory", "sm") + '</span><h3>Mémoire</h3><span class="meta" id="m-tot"></span></div>' +
       '<div class="big num" id="m-val">—</div><div class="bar" id="m-bar" style="margin-top:22px"><i></i></div></section>' +
@@ -302,7 +304,7 @@
         $("#s-used").textContent = bytes(used) + " utilisés"; $("#s-total").textContent = bytes(st.volume.total) + " au total";
         var ts = tempState(st.temp);
         $("#t-val").innerHTML = st.temp == null ? "—" : st.temp + "<small>°C</small>";
-        $("#t-dot").className = "dot " + ts[0]; $("#t-lab").textContent = ts[1] + " · ventilation automatique";
+        $("#t-dot").className = "dot " + ts[0]; $("#t-lab").textContent = ts[1] + (st.fan ? " · ventilateur " + fr(st.fan, 0) + " tr/min" : " · ventilateur à l’arrêt");
         $("#c-val").innerHTML = st.cpu == null ? "…" : st.cpu + "<small>%</small>";
         $("#c-spark").innerHTML = spark([S.hist.cpu], 100);
         $("#m-val").innerHTML = esc(bytes(st.mem.used)) + "<small>utilisés</small>"; $("#m-tot").textContent = bytes(st.mem.total);
@@ -318,13 +320,24 @@
     var hd = $("#hostdot"); if (hd && st) { var l = health(st).level; hd.className = "dot pulse" + (l === "ok" ? "" : " " + l); }
   }
   function kv(rows) { return rows.map(function (r) { return "<dt>" + esc(r[0]) + "</dt><dd title=\"" + esc(r[1]) + "\">" + esc(r[1]) + "</dd>"; }).join(""); }
+  var DISK = {
+    ok: ["", "SMART OK"], sleep: ["off", "en veille"], bad: ["bad", "erreurs de lecture, à remplacer"],
+    error: ["bad", "ne répond plus, à remplacer"], unknown: ["off", "état inconnu"], pending: ["off", "vérification…"]
+  };
   function baysHTML(detail) {
     if (!S.disks) return '<div class="skel"><i style="width:40%"></i></div>';
     return ["gauche", "droite"].map(function (b) {
       var d = S.disks.filter(function (x) { return x.bay === b; })[0];
       if (!d) return '<div class="bay vacant"><span class="bay-label">' + b + '</span><div class="grow">Baie vide' + (detail ? " — ou disque non détecté (vérifie qu’il est bien enfoncé)" : "") + '</div><span class="dot off"></span></div>';
-      return '<div class="bay"><span class="bay-label">' + b + '</span><div class="grow"><div class="name">' + esc(d.vendor + " " + d.model) + '</div><div class="label">' +
-        esc(bytes(d.size)) + (detail ? " · /dev/" + esc(d.dev) + " · Volume_1" : "") + '</div></div><span class="dot"></span></div>';
+      var hs = DISK[d.health] || DISK.unknown, err = d.health === "error";
+      var name = d.family || (d.vendor + " " + d.model);
+      var cap = d.size || (parseFloat(d.label) || 0) * (/TB/i.test(d.label) ? 1e12 : 1e9);
+      var bits = [cap ? bytes(cap) : "taille inconnue"];
+      if (d.temp) bits.push(d.temp + " °C");
+      bits.push(hs[1]);
+      if (detail) { bits.push("/dev/" + d.dev); bits.push(d.dev === "sda" ? "Volume_1" : "non utilisé"); }
+      return '<div class="bay' + (err ? " sick" : "") + '"><span class="bay-label">' + b + '</span><div class="grow"><div class="name">' + esc(name) + '</div><div class="label">' +
+        esc(bits.join(" · ")) + '</div></div><span class="dot ' + hs[0] + '" title="' + esc(hs[1]) + '"></span></div>';
     }).join("");
   }
 
@@ -557,7 +570,7 @@
     var fd = new FormData();
     fd.append("path", u.dest); fd.append("relpath", u.rel || ""); fd.append("file", u.file, u.file.name);
     var xhr = new XMLHttpRequest();
-    xhr.open("POST", "api.php?a=upload");
+    xhr.open("POST", "api?a=upload");
     xhr.setRequestHeader("X-Osa", "1");
     xhr.upload.onprogress = function (e) { if (e.lengthComputable) { u.sent = e.loaded; drawUploads(); } };
     xhr.onload = function () {
@@ -657,7 +670,7 @@
       '<p class="dim" style="margin:0 0 14px">Un redémarrage prend environ deux minutes. OsaNAS revient tout seul.</p>' +
       '<div class="btnrow"><button class="pill secondary" id="y-restart">' + icon("restart", "sm") + 'Redémarrer</button><button class="pill danger" id="y-off">' + icon("power", "sm") + "Éteindre</button></div></section>" +
       "</div>" +
-      '<div class="foot"><span id="y-ver">OsaNAS</span><a id="y-legacy" href="#" target="_blank" rel="noopener">Ancienne interface D-Link ↗</a></div></div>';
+      '<div class="foot"><span id="y-ver">OsaNAS</span><a id="y-legacy" href="#" target="_blank" rel="noopener">Interface Alt-F ↗</a></div></div>';
     $("#pwf").addEventListener("submit", function (e) {
       e.preventDefault();
       var err = $("#pw-err"); err.textContent = "";
@@ -680,10 +693,11 @@
     $("#y-bays").innerHTML = baysHTML(true);
     if (!st) return;
     var late = st.time < 1500000000;
-    $("#y-model").textContent = "D-Link " + st.model;
+    $("#y-model").textContent = "D-Link " + st.model + " · " + st.firmware;
     $("#y-kv").innerHTML = kv([
-      ["Nom", st.name], ["Modèle", "D-Link " + st.model + " · firmware " + st.firmware], ["Système", "Linux " + st.kernel + " · ARMv5"],
-      ["Adresse IP", st.ip + (st.dhcp ? " (DHCP)" : "")], ["Passerelle", st.gateway], ["Adresse MAC", st.mac],
+      ["Nom", st.name], ["Modèle", "D-Link " + st.model], ["Firmware", st.firmware], ["Système", "Linux " + st.kernel + " · ARMv5"],
+      ["Adresse IP", st.ip], ["Passerelle", st.gateway || "—"], ["Adresse MAC", st.mac],
+      ["Ventilateur", st.fan ? fr(st.fan, 0) + " tr/min" : "à l’arrêt"],
       ["Allumé depuis", uptime(st.uptime)], ["Heure du NAS", late ? "Pas à l’heure (pas d’accès NTP)" : new Date(st.time * 1000).toLocaleString("fr-FR")]
     ]);
     if (!$("#y-access").dataset.done) {
@@ -692,7 +706,7 @@
         '<p class="dim" style="margin:0 0 4px">Dans le Finder : <b>⌘K</b> puis colle l’adresse. Connexion en invité.</p>' +
         copyRow("macOS", "smb://" + st.ip + "/Volume_1", "smb://" + st.ip + "/Volume_1") +
         copyRow("Windows", "\\\\" + st.ip + "\\Volume_1") +
-        copyRow("OsaNAS", "http://" + st.name + ".local:8080", "http://" + st.name + ".local:8080");
+        copyRow("OsaNAS", "http://" + st.ip + ":8080", "http://" + st.ip + ":8080");
       $$("[data-copy]", $("#y-access")).forEach(function (b) {
         b.onclick = function () {
           var t = b.dataset.copy;
@@ -719,7 +733,7 @@
         showOffline("Redémarrage…", "Environ deux minutes. La page revient toute seule.", "busy");
         var t0 = Date.now(), seenDown = false;
         var iv = setInterval(function () {
-          fetch("api.php?a=me", { cache: "no-store" }).then(function (r) { if (seenDown || Date.now() - t0 > 60000) { clearInterval(iv); location.reload(); } return r; })
+          fetch("api?a=me", { cache: "no-store" }).then(function (r) { if (seenDown || Date.now() - t0 > 60000) { clearInterval(iv); location.reload(); } return r; })
             .catch(function () { seenDown = true; });
         }, 4000);
       });

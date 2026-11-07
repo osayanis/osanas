@@ -1,18 +1,18 @@
-#!/bin/bash
-# Déploie OsaNAS sur le DNS-320 par le partage Volume_1 (SMB invité).
-# Le web (www/) est pris en compte tout de suite ; start.sh / lighttpd.conf / fun_plug au prochain redémarrage.
-set -euo pipefail
-NAS=${NAS:-192.168.1.171}
-HERE=$(cd "$(dirname "$0")" && pwd)
-MNT=$(mktemp -d /tmp/osanas-mnt.XXXX)
-cleanup() { diskutil unmount "$MNT" >/dev/null 2>&1 || umount "$MNT" 2>/dev/null || true; rmdir "$MNT" 2>/dev/null || true; }
-trap cleanup EXIT
+#!/bin/sh
+# Compile OsaNAS pour le DNS-320 (ARMv5) et l'installe sur le NAS sous Alt-F.
+# Usage : ./deploy.sh [ip]   — SSH root (mot de passe demandé, ou SSH_ASKPASS)
+set -e
+NAS=${1:-192.168.1.171}
+cd "$(dirname "$0")"
+mkdir -p build
+(cd server && GOOS=linux GOARCH=arm GOARM=5 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../build/osanas .)
+echo "binaire : $(du -h build/osanas | cut -f1)"
 
-mount_smbfs -N "//guest@$NAS/Volume_1" "$MNT"
-mkdir -p "$MNT/.osanas"
-COPYFILE_DISABLE=1 rsync -rt --delete --exclude 'tmp/' --exclude 'log/' --exclude 'conf/' --exclude '.DS_Store' \
-  "$HERE/nas/osanas/" "$MNT/.osanas/"
-cp "$HERE/nas/fun_plug" "$MNT/fun_plug"
-chmod 755 "$MNT/fun_plug" "$MNT/.osanas/start.sh"
-find "$MNT/.osanas" "$MNT" -maxdepth 3 -name '._*' -delete 2>/dev/null || true
-echo "OsaNAS déployé sur $NAS → http://$NAS:8080"
+SSH="ssh -o PubkeyAuthentication=no root@$NAS"
+DIR=/mnt/sda2/.osanas
+$SSH "mkdir -p $DIR && cat > $DIR/osanas.new && chmod 755 $DIR/osanas.new" < build/osanas
+# Alt-F ne lance le script utilisateur après montage que s'il est à la racine du volume
+RUN=/mnt/sda2/.osanas.sh
+$SSH "cat > $RUN && chmod 755 $RUN" < nas/start.sh
+$SSH "chmod 700 $DIR && $RUN stop; mv -f $DIR/osanas.new $DIR/osanas && $RUN start; sleep 2; $RUN status"
+echo "→ http://$NAS:8080"
