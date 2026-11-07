@@ -1,0 +1,11 @@
+#!/bin/sh
+# OsaNAS - lance par le firmware D-Link au demarrage (chk_fun_plug), en root.
+# Passe la main a start.sh. Supprimer ce fichier desactive OsaNAS.
+B=/mnt/HD/HD_a2/.osanas
+mkdir -p $B/log
+echo "fun_plug $(cut -d' ' -f1 /proc/uptime)s" > $B/log/fun_plug.log
+if [ -f $B/start.sh ]; then
+  sh $B/start.sh > $B/log/start.log 2>&1 < /dev/null &
+fi
+echo "fun_plug ok" >> $B/log/fun_plug.log
+exit 0
