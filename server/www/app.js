@@ -128,6 +128,7 @@
   /* ================= rendu principal ================= */
   var app = $("#app");
   var shellOn = false;
+  var shownRoute = null; // dernière section affichée : l'entrée animée complète ne joue qu'à l'ouverture
 
   function render() {
     if (S.user === undefined) return;
@@ -135,6 +136,10 @@
     if (!shellOn) renderShell();
     updateTabs();
     var v = $("#view");
+    // 1re ouverture : entrée en cascade. Changement d'onglet : fondu bref. Même section (dossier) : rien.
+    v.className = shownRoute === null ? "" : shownRoute !== S.route.name ? "quick" : "still";
+    if (shownRoute !== null && shownRoute !== S.route.name) window.scrollTo(0, 0);
+    shownRoute = S.route.name;
     if (S.route.name === "files") renderFiles(v);
     else if (S.route.name === "system") renderSystem(v);
     else renderHome(v);
@@ -173,6 +178,7 @@
   /* ---------- coquille ---------- */
   function renderShell() {
     shellOn = true;
+    shownRoute = null;
     app.innerHTML =
       '<header class="topbar" id="top">' +
       '<a href="#/" aria-label="Accueil OsaNAS" style="text-decoration:none">' + WORDMARK + "</a>" +

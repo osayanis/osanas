@@ -145,6 +145,10 @@ a { color: inherit; }
 .enter > *:nth-child(6) { animation-delay: 340ms; }
 .enter > *:nth-child(n+7) { animation-delay: 400ms; }
 @keyframes enter { from { opacity: 0; transform: translateY(18px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+/* navigation entre onglets : action fréquente, donc quasi instantanée */
+#view.quick .enter > * { animation: swap 160ms var(--ease-out) both; animation-delay: 0ms; }
+#view.still .enter > * { animation: none; }
+@keyframes swap { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 /* ---------- cartes ---------- */
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; }
