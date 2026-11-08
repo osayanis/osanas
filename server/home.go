@@ -26,7 +26,11 @@ func homeProxy(w http.ResponseWriter, method, path string, body any) error {
 		return fail(503, "Le pont OsaHome ne répond pas")
 	}
 	defer resp.Body.Close()
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	ct := resp.Header.Get("Content-Type")
+	if ct == "" {
+		ct = "application/json; charset=utf-8"
+	}
+	w.Header().Set("Content-Type", ct)
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, io.LimitReader(resp.Body, 1<<20))

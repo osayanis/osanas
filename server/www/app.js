@@ -687,8 +687,9 @@
       '<div class="btnrow" style="margin-top:18px"><button class="pill" id="g-open">' + icon("up", "sm") + 'Ouvrir</button><button class="pill secondary" id="g-close">' + icon("down", "sm") + "Fermer</button></div></section>" +
       '<section class="card c-6"><div class="card-head"><span class="tile">' + icon("maison", "sm") + '</span><h3>App Maison</h3><span class="dot" id="hk-dot"></span></div>' +
       '<div class="label" id="hk-sub">—</div>' +
-      '<div class="copy"><span class="label">Code</span><code id="hk-pin">—</code><button class="icon-btn" id="hk-copy" title="Copier" aria-label="Copier le code HomeKit">' + icon("copy", "sm") + "</button></div>" +
-      '<p class="label" style="margin:12px 2px 0">Dans l’app Maison : <b>+</b> → Ajouter un accessoire → Plus d’options → <b>OsaHome</b>. Depuis le réseau de la maison uniquement.</p></section>' +
+      '<div class="hk-pair"><img class="hk-qr" id="hk-qr" src="api?a=home-qr" alt="QR code HomeKit du pont OsaHome" width="132" height="132">' +
+      '<div class="grow"><div class="copy" style="margin-top:0"><span class="label">Code</span><code id="hk-pin">—</code><button class="icon-btn" id="hk-copy" title="Copier" aria-label="Copier le code HomeKit">' + icon("copy", "sm") + "</button></div>" +
+      '<p class="label" style="margin:10px 2px 0" id="hk-how">Dans l’app Maison : <b>+</b> → Ajouter un accessoire, puis scanne ce QR code. Depuis le réseau de la maison uniquement.</p></div></div></section>' +
       '<div class="c-12 grid" id="vl" style="padding:0"></div>' +
       '<section class="card c-12"><div class="card-head"><span class="tile">' + icon("doc", "sm") + '</span><h3>Journal du pont</h3><span class="meta" id="hk-ver"></span></div><pre class="log" id="hk-log">…</pre></section>' +
       "</div></div>";
@@ -744,7 +745,11 @@
     }
     $("#hk-pin").textContent = h.pin;
     $("#hk-dot").className = "dot " + (h.paired ? "ok" : "warn");
-    $("#hk-sub").textContent = h.paired ? "Le pont est appairé à l’app Maison." : "Pas encore appairé : ajoute le pont avec ce code.";
+    $("#hk-sub").textContent = h.paired ? "Le pont est appairé à l’app Maison." : "Pas encore appairé : scanne le QR code ou tape le code.";
+    $("#hk-qr").classList.toggle("used", !!h.paired);
+    $("#hk-how").innerHTML = h.paired
+      ? "Déjà ajouté à une maison. Pour l’ajouter ailleurs, supprime d’abord le pont <b>OsaHome</b> dans l’app Maison, puis scanne ce QR code."
+      : "Dans l’app Maison : <b>+</b> → Ajouter un accessoire, puis scanne ce QR code. Depuis le réseau de la maison uniquement.";
     $("#hk-ver").textContent = "OsaHome " + h.version + " · démarré " + ago(h.since);
     var vs = h.volets || [];
     var vl = $("#vl");
@@ -759,7 +764,7 @@
           }).join("") + "</div></section>";
       }).join("") :
         '<section class="card c-12"><div class="card-head"><span class="tile">' + icon("blinds", "sm") + '</span><h3>Volets</h3><span class="dot off"></span></div>' +
-        '<p class="dim" style="margin:0">Aucun volet pour l’instant. Le module QS-WIFI-C01 doit d’abord passer sous ESPHome ; il apparaîtra ici et dans l’app Maison dès qu’il sera déclaré dans le pont.</p></section>';
+        '<p class="dim" style="margin:0">Aucun volet déclaré dans le pont pour l’instant. Un module Tuya (avec sa clé locale) ou ESPHome apparaîtra ici et dans l’app Maison dès qu’il sera ajouté à la config.</p></section>';
     }
     vs.forEach(function (x, i) {
       var st = x.state === "opening" ? "Ouverture…" : x.state === "closing" ? "Fermeture…" : x.position >= 100 ? "Ouvert" : x.position <= 0 ? "Fermé" : "Ouvert à " + x.position + " %";

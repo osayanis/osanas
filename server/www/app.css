@@ -394,6 +394,10 @@ a { color: inherit; }
 
 /* ---------- maison ---------- */
 .log { margin: 0; padding: 12px 14px; border-radius: var(--r-s); background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); font: 500 11.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dim); white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; }
+.hk-pair { display: flex; gap: 16px; align-items: center; margin-top: 12px; }
+.hk-qr { width: 132px; height: 132px; flex: none; border-radius: var(--r-s); background: #fff; padding: 0; image-rendering: pixelated; transition: opacity 200ms var(--ease-out); }
+.hk-qr.used { opacity: 0.35; }
+@media (max-width: 640px) { .hk-pair { flex-direction: column; align-items: stretch; } .hk-qr { align-self: center; width: 180px; height: 180px; } }
 .dot.info { background: var(--info); box-shadow: 0 0 0 3px rgba(90, 169, 255, 0.18); }
 
 /* ---------- petits écrans ---------- */
