@@ -4,8 +4,9 @@
 # soit au démarrage (S99user), soit dès que le disque est monté (hot_aux.sh) si le
 # montage arrive plus tard (vérification fsck). Il doit être à la racine du volume.
 #
-# Lance le serveur OsaNAS et, si .osanas/tunnel.conf existe, un tunnel SSH inverse
-# vers un serveur public (accès à distance). Chacun est relancé s'il s'arrête.
+# Lance le serveur OsaNAS, le pont HomeKit OsaHome (si .osanas/osahome et
+# .osanas/osahome.json existent) et, si .osanas/tunnel.conf existe, un tunnel SSH
+# inverse vers un serveur public (accès à distance). Chacun est relancé s'il s'arrête.
 
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 # au démarrage, Alt-F lance ce script sans HOME : dbclient ne trouverait pas known_hosts
@@ -16,6 +17,9 @@ BIN=$DIR/osanas
 LOG=/var/log/osanas.log
 PIDF=/var/run/osanas.pid
 TPIDF=/var/run/osanas-tunnel.pid
+HBIN=$DIR/osahome
+HCONF=$DIR/osahome.json
+HPIDF=/var/run/osahome.pid
 # tunnel.conf : TUNNEL_DEST=utilisateur@hôte  TUNNEL_PORT=port d'écoute sur l'hôte (127.0.0.1)
 TCONF=$DIR/tunnel.conf
 
@@ -32,6 +36,15 @@ supervise() {
 		$BIN -root $VOL -addr :8080 >> $LOG 2>&1
 		echo "$(date) osanas s'est arrêté (code $?), relance dans 3 s" >> $LOG
 		sleep 3
+	done
+}
+
+home() {
+	while true; do
+		trim_log
+		$HBIN -config $HCONF -data $DIR/hap >> $LOG 2>&1
+		echo "$(date) osahome s'est arrêté (code $?), relance dans 5 s" >> $LOG
+		sleep 5
 	done
 }
 
@@ -59,19 +72,23 @@ case "$1" in
 			sleep 2
 		done
 		running $PIDF || { supervise & echo $! > $PIDF; }
+		if [ -x $HBIN ] && [ -f $HCONF ]; then
+			running $HPIDF || { home & echo $! > $HPIDF; }
+		fi
 		if [ -f $TCONF ] && [ -f $DIR/tunnel_key ] && [ -f $DIR/known_hosts ]; then
 			running $TPIDF || { tunnel & echo $! > $TPIDF; }
 		fi
 		;;
 	stop)
-		for f in $PIDF $TPIDF; do [ -f $f ] && kill $(cat $f) 2>/dev/null; rm -f $f; done
-		killall osanas dbclient 2>/dev/null
+		for f in $PIDF $HPIDF $TPIDF; do [ -f $f ] && kill $(cat $f) 2>/dev/null; rm -f $f; done
+		killall osanas osahome dbclient 2>/dev/null
 		;;
 	restart)
 		$0 stop; sleep 1; $0 start
 		;;
 	status)
 		pidof osanas > /dev/null && echo "osanas tourne" || { echo "osanas arrêté"; exit 1; }
+		[ -f $HCONF ] && { pidof osahome > /dev/null && echo "osahome tourne" || echo "osahome arrêté"; }
 		[ -f $TCONF ] && { pidof dbclient > /dev/null && echo "tunnel ouvert" || echo "tunnel fermé"; }
 		;;
 	*)
