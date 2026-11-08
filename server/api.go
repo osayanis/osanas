@@ -58,7 +58,7 @@ func api(w http.ResponseWriter, r *http.Request) {
 	var res any
 	err := func() error {
 		// Les actions qui modifient : POST + en-tête X-Osa (un autre site ne peut pas l'envoyer).
-		write := act != "me" && act != "status" && act != "disks" && act != "ls" && act != "get"
+		write := act != "me" && act != "status" && act != "disks" && act != "ls" && act != "get" && act != "home"
 		if write && (r.Method != http.MethodPost || r.Header.Get("X-Osa") == "") {
 			return fail(403, "Requête refusée")
 		}
@@ -111,6 +111,16 @@ func api(w http.ResponseWriter, r *http.Request) {
 			res = map[string]any{"ok": true}
 		case "status":
 			res = status()
+		case "home":
+			return homeProxy(w, "GET", "/status", nil)
+		case "home-garage":
+			return homeProxy(w, "POST", "/garage", map[string]any{"open": a["open"] == true})
+		case "home-volet":
+			pos, ok := a["position"].(float64)
+			if !ok {
+				return fail(400, "Position manquante")
+			}
+			return homeProxy(w, "POST", "/volet", map[string]any{"name": a.str("name"), "position": int(pos)})
 		case "disks":
 			res = map[string]any{"disks": disks()}
 		case "ls":

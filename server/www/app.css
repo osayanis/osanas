@@ -392,6 +392,10 @@ a { color: inherit; }
 .offline h2 { margin: 12px 0 6px; font-size: 20px; letter-spacing: -0.02em; }
 .offline p { margin: 0; color: var(--dim); }
 
+/* ---------- maison ---------- */
+.log { margin: 0; padding: 12px 14px; border-radius: var(--r-s); background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); font: 500 11.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dim); white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; }
+.dot.info { background: var(--info); box-shadow: 0 0 0 3px rgba(90, 169, 255, 0.18); }
+
 /* ---------- petits écrans ---------- */
 @media (max-width: 900px) {
   :root { --pad: 18px; }

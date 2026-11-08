@@ -78,7 +78,10 @@
     external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/>',
     sort: '<path d="m8 9 4-4 4 4M8 15l4 4 4-4"/>',
     up: '<path d="m7 14 5-5 5 5"/>',
-    down: '<path d="m7 10 5 5 5-5"/>'
+    down: '<path d="m7 10 5 5 5-5"/>',
+    maison: '<path d="M4 10.5 12 4l8 6.5V20H4z"/><rect x="9" y="12.5" width="6" height="4.5" rx="1"/>',
+    garage: '<path d="M3 20V9.5l9-5.5 9 5.5V20"/><path d="M7 20v-8.5h10V20M7 14.5h10M7 17.5h10"/>',
+    blinds: '<rect x="4" y="3.5" width="16" height="3" rx="1"/><path d="M5.5 6.5V20M18.5 6.5V20M5.5 10.5h13M5.5 14.5h13M12 14.5v3"/>'
   };
   function icon(n, cls) { return '<svg class="i ' + (cls || "") + '" viewBox="0 0 24 24" aria-hidden="true">' + (P[n] || P.file) + "</svg>"; }
   var MARK = '<svg class="mark" viewBox="0 0 36 38" aria-hidden="true"><rect width="36" height="10" rx="3" fill="#fff" fill-opacity=".95"/><rect y="14" width="36" height="10" rx="3" fill="#fff" fill-opacity=".42"/><rect y="28" width="36" height="10" rx="3" fill="#fff" fill-opacity=".95"/><circle cx="29" cy="5" r="2" fill="#0a0a0f"/><circle cx="29" cy="19" r="2" fill="#0a0a0f"/><circle cx="29" cy="33" r="2" fill="#0a0a0f"/></svg>';
@@ -104,7 +107,7 @@
   /* ================= état ================= */
   var S = {
     user: undefined, defaultPassword: false,
-    status: null, disks: null,
+    status: null, disks: null, home: null, homeErr: null,
     hist: { cpu: [], rx: [], tx: [] },
     route: { name: "home", path: "" },
     files: { path: null, items: [], loading: false, sort: "name", dir: 1, view: "list", filter: "", sel: {} },
@@ -118,10 +121,11 @@
     var parts = h.split("/");
     if (parts[0] === "fichiers") return { name: "files", path: parts.slice(1).filter(Boolean).map(decodeURIComponent).join("/") };
     if (parts[0] === "systeme") return { name: "system", path: "" };
+    if (parts[0] === "maison") return { name: "maison", path: "" };
     return { name: "home", path: "" };
   }
   function go(name, path) {
-    var h = name === "files" ? "#/fichiers/" + (path ? path.split("/").map(encodeURIComponent).join("/") : "") : name === "system" ? "#/systeme" : "#/";
+    var h = name === "files" ? "#/fichiers/" + (path ? path.split("/").map(encodeURIComponent).join("/") : "") : name === "system" ? "#/systeme" : name === "maison" ? "#/maison" : "#/";
     if (location.hash === h) route(); else location.hash = h;
   }
   window.addEventListener("hashchange", route);
@@ -144,6 +148,7 @@
     shownRoute = S.route.name;
     if (S.route.name === "files") renderFiles(v);
     else if (S.route.name === "system") renderSystem(v);
+    else if (S.route.name === "maison") renderMaison(v);
     else renderHome(v);
     startPoll();
   }
@@ -188,6 +193,7 @@
       '<span class="thumb" id="thumb"></span>' +
       '<button data-r="home">' + icon("home", "sm") + "Accueil</button>" +
       '<button data-r="files">' + icon("folder", "sm") + "Fichiers</button>" +
+      '<button data-r="maison">' + icon("maison", "sm") + "Maison</button>" +
       '<button data-r="system">' + icon("server", "sm") + "Système</button>" +
       "</nav>" +
       '<span class="spacer"></span>' +
@@ -225,6 +231,7 @@
       if (e.status === 401) return;
       if (++fails >= 2) showOffline("Le NAS ne répond plus", "Je réessaie toutes les 3 secondes…");
     });
+    if (S.route.name === "maison") pollHome();
     if (!S.disks || S.disks.some(function (d) { return d.health === "pending"; }) || Math.random() < 0.05) api("disks").then(function (d) { S.disks = d.disks; updateLive(); }).catch(function () {});
   }
   function push(arr, v) { if (v == null) return; arr.push(v); if (arr.length > 40) arr.shift(); }
@@ -658,6 +665,113 @@
       // un dossier vide transporté seul : on ignore (rien à envoyer)
       return out.filter(function (x) { return !/(^|\/)\.DS_Store$/.test(x.rel || x.file.name); });
     });
+  }
+
+  /* ================= maison (pont HomeKit OsaHome) ================= */
+  var DOOR = {
+    open: ["warn", "Ouvert"], closed: ["ok", "Fermé"], opening: ["info", "Ouverture…"],
+    closing: ["info", "Fermeture…"], stopped: ["warn", "Arrêté à mi-course"]
+  };
+  function pollHome() {
+    if (document.hidden || !S.user) return;
+    api("home").then(function (h) { S.home = h; S.homeErr = null; updateMaison(); })
+      .catch(function (e) { if (e.status === 401) return; S.homeErr = e.message; updateMaison(); });
+  }
+  function renderMaison(v) {
+    v.innerHTML =
+      '<div class="page"><div class="page-head"><div class="grow"><h1>Maison</h1><div class="sub">Garage et volets, pilotés en local par le pont HomeKit du NAS.</div></div></div>' +
+      '<div class="grid enter" id="maison">' +
+      '<div class="c-12" id="mh-err" hidden></div>' +
+      '<section class="card c-6"><div class="card-head"><span class="tile">' + icon("garage", "sm") + '</span><h3 id="g-name">Garage</h3><span class="dot" id="g-dot"></span></div>' +
+      '<div class="big" id="g-state">—</div><div class="label" id="g-sub" style="margin-top:6px">&nbsp;</div>' +
+      '<div class="btnrow" style="margin-top:18px"><button class="pill" id="g-open">' + icon("up", "sm") + 'Ouvrir</button><button class="pill secondary" id="g-close">' + icon("down", "sm") + "Fermer</button></div></section>" +
+      '<section class="card c-6"><div class="card-head"><span class="tile">' + icon("maison", "sm") + '</span><h3>App Maison</h3><span class="dot" id="hk-dot"></span></div>' +
+      '<div class="label" id="hk-sub">—</div>' +
+      '<div class="copy"><span class="label">Code</span><code id="hk-pin">—</code><button class="icon-btn" id="hk-copy" title="Copier" aria-label="Copier le code HomeKit">' + icon("copy", "sm") + "</button></div>" +
+      '<p class="label" style="margin:12px 2px 0">Dans l’app Maison : <b>+</b> → Ajouter un accessoire → Plus d’options → <b>OsaHome</b>. Depuis le réseau de la maison uniquement.</p></section>' +
+      '<div class="c-12 grid" id="vl" style="padding:0"></div>' +
+      '<section class="card c-12"><div class="card-head"><span class="tile">' + icon("doc", "sm") + '</span><h3>Journal du pont</h3><span class="meta" id="hk-ver"></span></div><pre class="log" id="hk-log">…</pre></section>' +
+      "</div></div>";
+    $("#g-open").onclick = function () { garage(true); };
+    $("#g-close").onclick = function () { garage(false); };
+    $("#hk-copy").onclick = function () {
+      var t = S.home && S.home.pin; if (!t) return;
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast("Code copié"); }).catch(function () {});
+    };
+    $("#vl").addEventListener("click", function (e) {
+      var b = e.target.closest("[data-pos]"); if (!b) return;
+      api("home-volet", { body: { name: b.dataset.name, position: Number(b.dataset.pos) } })
+        .then(function () { toast(b.dataset.name + " : " + b.dataset.pos + " %"); pollHome(); })
+        .catch(function (x) { toast(x.message); });
+    });
+    updateMaison();
+    pollHome();
+  }
+  function garage(open) {
+    sheet({
+      title: open ? "Ouvrir le garage ?" : "Fermer le garage ?",
+      text: "La porte va bouger. Vérifie que rien ni personne n’est dans le passage" + (REMOTE ? " : tu n’es pas à la maison." : "."),
+      ok: open ? "Ouvrir" : "Fermer"
+    }, function () {
+      return api("home-garage", { body: { open: open } }).then(function () { toast(open ? "Ouverture demandée" : "Fermeture demandée"); pollHome(); });
+    });
+  }
+  function ago(ts) {
+    if (!ts || ts < 1000000000) return "";
+    var s = Math.max(0, Date.now() / 1000 - ts);
+    if (s < 60) return "à l’instant";
+    if (s < 3600) return "il y a " + Math.floor(s / 60) + " min";
+    if (s < 86400) return "il y a " + Math.floor(s / 3600) + " h";
+    return when(ts);
+  }
+  function updateMaison() {
+    if (S.route.name !== "maison" || !$("#maison")) return;
+    var h = S.home, err = $("#mh-err");
+    err.hidden = !S.homeErr;
+    if (S.homeErr) err.innerHTML = '<div class="banner">' + icon("x") + '<div class="grow"><b>' + esc(S.homeErr) + '.</b> <span class="dim">Il redémarre tout seul en quelques secondes ; sinon, redémarre le NAS.</span></div></div>';
+    if (!h) return;
+    var g = h.garage;
+    $("#g-open").disabled = $("#g-close").disabled = !g || !g.online;
+    if (g) {
+      var d = DOOR[g.state] || DOOR.closed;
+      $("#g-name").textContent = g.name;
+      $("#g-state").textContent = g.online ? d[1] : "Injoignable";
+      $("#g-dot").className = "dot " + (g.online ? d[0] : "bad");
+      $("#g-sub").textContent = g.online ? (g.since ? "Depuis " + when(g.since).replace(/^Aujourd’hui, /, "") + " · " : "") + "Meross · " + g.ip
+        : "Dernière réponse " + (ago(g.seen) || "jamais") + " · " + g.ip;
+    } else {
+      $("#g-state").textContent = "Non configuré"; $("#g-dot").className = "dot off"; $("#g-sub").textContent = "";
+    }
+    $("#hk-pin").textContent = h.pin;
+    $("#hk-dot").className = "dot " + (h.paired ? "ok" : "warn");
+    $("#hk-sub").textContent = h.paired ? "Le pont est appairé à l’app Maison." : "Pas encore appairé : ajoute le pont avec ce code.";
+    $("#hk-ver").textContent = "OsaHome " + h.version + " · démarré " + ago(h.since);
+    var vs = h.volets || [];
+    var vl = $("#vl");
+    var sig = JSON.stringify(vs.map(function (x) { return x.name; }));
+    if (vl.dataset.sig !== sig) {
+      vl.dataset.sig = sig;
+      vl.innerHTML = vs.length ? vs.map(function (x, i) {
+        return '<section class="card c-6"><div class="card-head"><span class="tile">' + icon("blinds", "sm") + "</span><h3>" + esc(x.name) + '</h3><span class="dot" id="v' + i + '-dot"></span></div>' +
+          '<div class="big num" id="v' + i + '-pos">—</div><div class="bar" style="margin-top:14px"><i id="v' + i + '-bar"></i></div><div class="label" id="v' + i + '-sub" style="margin-top:8px">&nbsp;</div>' +
+          '<div class="btnrow" style="margin-top:14px">' + [[100, "Ouvrir"], [50, "Mi-hauteur"], [0, "Fermer"]].map(function (p, k) {
+            return '<button class="pill sm' + (k ? " secondary" : "") + '" data-name="' + esc(x.name) + '" data-pos="' + p[0] + '">' + p[1] + "</button>";
+          }).join("") + "</div></section>";
+      }).join("") :
+        '<section class="card c-12"><div class="card-head"><span class="tile">' + icon("blinds", "sm") + '</span><h3>Volets</h3><span class="dot off"></span></div>' +
+        '<p class="dim" style="margin:0">Aucun volet pour l’instant. Le module QS-WIFI-C01 doit d’abord passer sous ESPHome ; il apparaîtra ici et dans l’app Maison dès qu’il sera déclaré dans le pont.</p></section>';
+    }
+    vs.forEach(function (x, i) {
+      var st = x.state === "opening" ? "Ouverture…" : x.state === "closing" ? "Fermeture…" : x.position >= 100 ? "Ouvert" : x.position <= 0 ? "Fermé" : "Ouvert à " + x.position + " %";
+      $("#v" + i + "-pos").innerHTML = x.position + "<small>%</small>";
+      $("#v" + i + "-bar").style.width = Math.max(x.position, 0.6) + "%";
+      $("#v" + i + "-dot").className = "dot " + (x.online ? (x.state === "stopped" ? "ok" : "info") : "bad");
+      $("#v" + i + "-sub").textContent = x.online ? st : "Module muet " + (x.seen ? ago(x.seen) : "depuis le démarrage");
+    });
+    var lines = (h.log || []).slice(-14).reverse().map(function (l) {
+      return esc(new Date(l.t * 1000).toLocaleTimeString("fr-FR") + "  " + l.m);
+    });
+    $("#hk-log").innerHTML = lines.length ? lines.join("\n") : "Rien pour l’instant.";
   }
 
   /* ================= système ================= */
